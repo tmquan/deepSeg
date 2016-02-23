@@ -13,7 +13,88 @@ import random
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
-
+def augment_image(img, lbl, shiftedDistance=0, rotatedAngle=0, flip=1, constrast=1):
+	# First, transpose image to get normal numpy array
+	# img = np.transpose(np.squeeze(img), (1, 2, 0))
+	img = np.transpose((img), (1, 2, 0))
+	lbl = np.transpose((lbl), (1, 2, 0))
+	# print img.shape
+	
+	# Declare random option
+	# random_translate = random.randint(-shiftedDistance, shiftedDistance)
+	# random_rotatedeg = random.choice(range(-rotatedAngle, rotatedAngle))
+	# random_flip      = random.choice([1, 2, 3, 4])
+	
+	#Random rotate images around center point which is randomly shifted
+	if rotatedAngle !=0:
+		random_rotatedeg = random.choice(range(-rotatedAngle, rotatedAngle))
+		dimy, dimx, _ = img.shape
+		rot_mat = cv2.getRotationMatrix2D(                          \
+			(dimx/2+randint(-shiftedDistance, shiftedDistance), 	\
+			 dimy/2+randint(-shiftedDistance, shiftedDistance)),    \
+			random_rotatedeg, 1.0)
+		rotated = np.zeros(img.shape)
+		for k in range(img.shape[2]):
+			rotated1[:,:,k] = cv2.warpAffine(img[:,:,k], rot_mat, (dimx, dimy))
+			rotated2[:,:,k] = cv2.warpAffine(lbl[:,:,k], rot_mat, (dimx, dimy))
+		img = rotated1
+		lbl = rotated2
+	img = img.astype(np.float32)
+	lbl = lbl.astype(np.float32)
+	if flip:
+		random_flip      = random.choice([1, 2, 3, 4])
+		flipped1 = np.zeros(img.shape)
+		flipped2 = np.zeros(lbl.shape)
+		for k in range(img.shape[2]):
+			if random_flip==1:
+				flipped1[:,:,k] = cv2.flip(img[:,:,k], -1)
+				flipped2[:,:,k] = cv2.flip(lbl[:,:,k], -1)
+			elif random_flip==2:
+				flipped1[:,:,k] = cv2.flip(img[:,:,k], 0)
+				flipped2[:,:,k] = cv2.flip(lbl[:,:,k], 0)
+			elif random_flip==3:
+				flipped1[:,:,k] = cv2.flip(img[:,:,k], 1)
+				flipped2[:,:,k] = cv2.flip(lbl[:,:,k], 1)
+			elif random_flip==4:
+				flipped1[:,:,k] = img[:,:,k]
+				flipped2[:,:,k] = lbl[:,:,k]
+	else:
+		flipped1 = img
+		flipped2 = lbl 
+	img = flipped1
+	lbl = flipped2
+	img = img.astype(np.float32)
+	lbl = lbl.astype(np.float32)
+	
+	# dd = np.random.randint(3, 11) 
+	# sS = np.random.randint(2, 50) 
+	# sC = np.random.randint(2, 50)
+	# if constrast:
+		# img = denoise_tv_chambolle(img, weight=random.uniform(0.001, 0.1))
+		# for k in range(img.shape[2]):
+			# print img.dtype
+			# print img.shape
+			# img[:,:,k] = cv2.bilateralFilter(img[:,:,k], 
+				# d=dd, 
+				# sigmaSpace=sS, 
+				# sigmaColor=sC
+				# ) 
+				
+	img = np.transpose(img, (2, 0, 1))
+	lbl = np.transpose(lbl, (2, 0, 1))
+	return img, lbl 
+def augment_data(X, y):
+	progbar = Progbar(X.shape[0])
+	for k in range(X.shape[0]):
+		img  = X[k]
+		lbl  = y[k]
+		# print img.shape
+		img, lbl  = augment_image(img, lbl)
+		X[k] = img
+		y[k] = lbl 
+		progbar.add(1)
+	return X, y 
+		
 def get_model():
 	devs = [mx.gpu(0)]
 	network = symbol_deconv()
@@ -50,7 +131,7 @@ def train():
 	
 	nb_iter = 101
 	epochs_per_iter = 1 
-	batch_size = 30
+	batch_size = 10
 	
 	model_recon = get_model()
 	# dot 		= mx.viz.plot_network(symbol_deconv())
@@ -76,7 +157,8 @@ def train():
 			y_train = y[train]
 			y_valid = y[valid]
 			
-			
+			print('Augmenting data for training...')
+			X_train, y_train = augment_data(X_train, y_train) # Data augmentation for training 
 			# print "X_train", X_train.shape
 			# print "y_train", y_train.shape
 			
@@ -91,12 +173,12 @@ def train():
 			# prepare data
 			data_train = mx.io.NDArrayIter(X_train, y_train,
 										   batch_size=batch_size, 
-										   shuffle=False, 
+										   shuffle=True, 
 										   last_batch_handle='roll_over'
 										   )
 			data_valid = mx.io.NDArrayIter(X_valid, y_valid,
 										   batch_size=batch_size, 
-										   shuffle=False, 
+										   shuffle=True, 
 										   last_batch_handle='roll_over'
 										   )
 			
